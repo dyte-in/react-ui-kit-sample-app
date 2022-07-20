@@ -10,11 +10,13 @@ const selfieSegmentation = new SelfieSegmentation({
     return `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${file}`;
   }
 });
-const defaultBackgroundImage = 'https://storage.googleapis.com/dyte-image-cdn/bgImages/bg_4.jpg';
+const defaultBackgroundImage = '';
 
 selfieSegmentation.setOptions({
   modelSelection: 1,
 });
+
+
 
 export const SimpleDyteClient: React.FC<{}> = () => {
   const navigate = useNavigate();
@@ -46,7 +48,7 @@ export const SimpleDyteClient: React.FC<{}> = () => {
         navigate("/");
       });
 
-      let prevResults = false;
+      let prevResults: any = null;
       selfieSegmentation.initialize().then(() => {
         const cameraTrack = meeting.self.rawVideoTrack;
         const { height, width } = cameraTrack.getSettings()
@@ -59,53 +61,60 @@ export const SimpleDyteClient: React.FC<{}> = () => {
         cameraVideoElement.height = height;
         cameraVideoElement.srcObject = new MediaStream([cameraTrack]);
         console.log(cameraVideoElement)
+        var finishedImg: any;
 
-        let backgroundImage: HTMLImageElement;
-        const img = new Image();
-
-        img.style.objectFit = "fill";
-        img.src = defaultBackgroundImage;
-        img.addEventListener("load", async () => {
-          await img.decode()
-          backgroundImage = img
-          console.log("Setting Background Image", backgroundImage);
-        });
+        new Promise((resolve, reject) => {
+          let base_image = new Image();
+          base_image.src = 'https://images.unsplash.com/photo-1658293988294-f0eafc92fa60?ixlib=rb-1.2.1&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=776&q=80';
+          base_image.onload = () => resolve(base_image);
+          base_image.onerror = reject;
+          base_image.crossOrigin = "anonymous";
+      }).then(bg => {
+        finishedImg = bg;
+      })
+        
+        
 
         function RetroTheme() {
           console.log('Initialising RetroTheme');
-          cameraVideoElement.play()
+          cameraVideoElement.play();
+          selfieSegmentation.onResults(results => {
+            prevResults = results
+          });
           return async (canvas: HTMLCanvasElement, canvasCtx: CanvasRenderingContext2D) => {
 
             selfieSegmentation.send({ image: cameraVideoElement });
-            if (!prevResults && backgroundImage != undefined) {
-              prevResults = true
+            if (prevResults) {
+              canvasCtx.save()
+              canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
 
-              selfieSegmentation.onResults(results => {
-                canvasCtx.save()
-                canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
+              canvasCtx.globalCompositeOperation = 'copy';
+              canvasCtx.filter = 'blur(2px)';
 
-                canvasCtx.globalCompositeOperation = 'copy';
-                canvasCtx.filter = 'blur(2px)';
+              canvasCtx.drawImage(
+                prevResults.segmentationMask, 0, 0, canvas.width,
+                canvas.height);
 
-                canvasCtx.drawImage(
-                  results.segmentationMask, 0, 0, canvas.width,
-                  canvas.height);
+              canvasCtx.globalCompositeOperation = 'source-in';
+              canvasCtx.filter = 'none';
+              canvasCtx.drawImage(prevResults.image, 0, 0, canvas.width, canvas.height);
 
-                canvasCtx.globalCompositeOperation = 'source-in';
-                canvasCtx.filter = 'none';
-                canvasCtx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
+              canvasCtx.globalCompositeOperation = 'destination-atop';
+              if(finishedImg) {
+                canvasCtx.drawImage(finishedImg, 0, 0, canvas.width, canvas.height);
+                // Use this for blurring
+                // canvasCtx.filter = 'blur(8px)' // FIXME Does not work on Safari
+                // canvasCtx.drawImage(prevResults.image, 0, 0, canvas.width, canvas.height);
 
-                canvasCtx.globalCompositeOperation = 'destination-atop';
-                // canvasCtx.filter = 'none';
-                // canvasCtx.drawImage(backgroundImage, 0, 0, canvas.width, canvas.height);
+              } else {
                 canvasCtx.fillStyle = '#00FF00';
                 canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
+              }
 
-                // // Only overwrite missing pixels.
 
-                canvasCtx.restore();
-              });
+              // // Only overwrite missing pixels.
 
+              canvasCtx.restore();
             }
           }
 
